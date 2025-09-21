@@ -117,73 +117,78 @@ def simple_pcr_check(forward_primer, reverse_primer, sequence):
             }]
         return []
     except Exception as e:
-        st.error(f"Error in PCR check: {str(e)}")
         return []
 
-def check_primer_specificity_simple(forward_primer, reverse_primer, records, target_record_id, target_feature, target_feature_name):
-    """Simplified primer specificity check with extensive debugging."""
+def count_total_features(records):
+    """Count total features across all records for progress tracking."""
+    total = 0
+    for record in records:
+        features = extract_features_from_record(record)
+        for feature_type in ['CDS', 'tRNA', 'gene']:
+            if feature_type in features:
+                total += len(features[feature_type])
+    return total
+
+def check_primer_specificity_with_progress(forward_primer, reverse_primer, records, target_record_id, target_feature, target_feature_name):
+    """Primer specificity check with progress bar."""
     
     # Initialize results
     all_results = []
-    debug_info = []
     
     try:
-        st.write("🔍 **Starting Primer Specificity Analysis...**")
-        st.write(f"- Forward primer: `{forward_primer}`")
-        st.write(f"- Reverse primer: `{reverse_primer}`")
-        st.write(f"- Target record: `{target_record_id}`")
-        st.write(f"- Target feature: `{target_feature_name}`")
+        # Step 1: Check target feature
+        st.write("🎯 **Checking target sequence...**")
         
-        # First, check the target feature specifically
         if target_feature is not None:
-            try:
-                st.write("✅ Checking target feature...")
-                target_record = None
-                for record in records:
-                    if record.id == target_record_id:
-                        target_record = record
-                        break
+            target_record = None
+            for record in records:
+                if record.id == target_record_id:
+                    target_record = record
+                    break
+            
+            if target_record:
+                target_seq = target_feature.extract(target_record.seq)
+                pcr_results = simple_pcr_check(forward_primer, reverse_primer, target_seq)
                 
-                if target_record:
-                    target_seq = target_feature.extract(target_record.seq)
-                    st.write(f"Target sequence length: {len(target_seq)} bp")
-                    
-                    pcr_results = simple_pcr_check(forward_primer, reverse_primer, target_seq)
-                    
-                    if pcr_results:
-                        for result in pcr_results:
-                            all_results.append({
-                                'Record': target_record_id,
-                                'Feature': f"{target_feature_name} (TARGET)",
-                                'Location': str(target_feature.location),
-                                'Product Size': result['size'],
-                                'Status': '🎯 TARGET',
-                                'Is_Target': True
-                            })
-                        st.write(f"✅ Found {len(pcr_results)} target amplification(s)")
-                    else:
-                        st.write("⚠️ No amplification found in target feature")
+                if pcr_results:
+                    for result in pcr_results:
+                        all_results.append({
+                            'Record': target_record_id,
+                            'Feature': f"{target_feature_name} (TARGET)",
+                            'Location': str(target_feature.location),
+                            'Product Size': result['size'],
+                            'Status': '🎯 TARGET',
+                            'Is_Target': True
+                        })
+                    st.success(f"✅ Target sequence will be amplified (Product size: {pcr_results[0]['size']} bp)")
                 else:
-                    st.error("Could not find target record!")
-            except Exception as e:
-                st.error(f"Error checking target feature: {str(e)}")
-                debug_info.append(f"Target feature error: {str(e)}")
+                    st.warning("⚠️ No amplification detected in target sequence")
         
-        # Now check all other features in all records
-        st.write("🔍 Checking all other features for off-target amplification...")
+        # Step 2: Check all other features with progress bar
+        st.write("🔍 **Checking for off-target amplification...**")
         
-        total_features_checked = 0
+        # Count total features for progress tracking
+        total_features = count_total_features(records)
+        
+        # Create progress bar
+        progress_bar = st.progress(0)
+        status_text = st.empty()
+        
+        features_checked = 0
         
         for record in records:
-            st.write(f"Analyzing record: **{record.id}**")
-            
             # Get all features
             features = extract_features_from_record(record)
-            record_feature_count = 0
             
             for feature_type in ['CDS', 'tRNA', 'gene']:
                 if feature_type in features:
                     for feature in features[feature_type]:
+                        # Update progress
+                        features_checked += 1
+                        progress = features_checked / total_features
+                        progress_bar.progress(progress)
+                        status_text.text(f"Analyzing {record.id}: {feature_type} features... ({features_checked}/{total_features})")
+                        
                         # Skip target feature to avoid duplication
                         if (record.id == target_record_id and target_feature is not None and 
                             str(feature.location) == str(target_feature.location)):
@@ -216,30 +221,17 @@ def check_primer_specificity_simple(forward_primer, reverse_primer, records, tar
                                         'Is_Target': False
                                     })
                             
-                            record_feature_count += 1
-                            total_features_checked += 1
-                            
                         except Exception as e:
-                            debug_info.append(f"Feature {feature_type} in {record.id}: {str(e)}")
                             continue
-            
-            st.write(f"  - Checked {record_feature_count} features in {record.id}")
         
-        st.write(f"**Total features analyzed: {total_features_checked}**")
-        
-        # Show debug info if there were errors
-        if debug_info:
-            with st.expander("Debug Information"):
-                for info in debug_info:
-                    st.write(f"- {info}")
+        # Complete progress bar
+        progress_bar.progress(1.0)
+        status_text.text(f"✅ Analysis complete! Checked {total_features} features across {len(records)} record(s)")
         
         return all_results
         
     except Exception as e:
-        st.error(f"Critical error in specificity check: {str(e)}")
-        import traceback
-        st.error("Full traceback:")
-        st.code(traceback.format_exc())
+        st.error(f"Error during specificity analysis: {str(e)}")
         return []
 
 if uploaded_file is not None:
@@ -362,13 +354,9 @@ if uploaded_file is not None:
                     st.info("This tool will check if your primers might amplify unintended sequences.")
                     
                     # Show primer options
-                    primer_options = []
-                    for i, p in enumerate(st.session_state['primer_data']):
-                        primer_options.append(f"Pair {i+1}: {p['Left Sequence']} / {p['Right Sequence']}")
-                    
                     selected_pair = st.selectbox(
                         "Select a primer pair to analyze:", 
-                        options=range(len(primer_options)),
+                        options=range(len(st.session_state['primer_data'])),
                         format_func=lambda x: f"Pair {x+1}",
                         key="primer_pair_selection"
                     )
@@ -390,15 +378,9 @@ if uploaded_file is not None:
                         forward_primer = selected_primer['Left Sequence']
                         reverse_primer = selected_primer['Right Sequence']
                         
-                        # Debug: Show what we're working with
-                        st.write("**Analysis Parameters:**")
-                        st.write(f"- Number of records to analyze: {len(st.session_state['records'])}")
-                        st.write(f"- Target record: {st.session_state['selected_record']}")
-                        st.write(f"- Target feature: {st.session_state['selected_feature_name']}")
-                        
                         try:
-                            # Run specificity check
-                            results = check_primer_specificity_simple(
+                            # Run specificity check with progress bar
+                            results = check_primer_specificity_with_progress(
                                 forward_primer,
                                 reverse_primer,
                                 st.session_state['records'],
@@ -455,8 +437,8 @@ if uploaded_file is not None:
                             
                             else:
                                 st.success("🎯 **Perfect Specificity!**")
-                                st.write("No amplification products detected in any sequence.")
-                                st.write("These primers appear highly specific (or may not amplify under standard conditions).")
+                                st.write("No off-target amplification products detected.")
+                                st.write("These primers appear to be highly specific to your target sequence.")
                         
                         except Exception as e:
                             st.error(f"Error during specificity analysis: {str(e)}")
