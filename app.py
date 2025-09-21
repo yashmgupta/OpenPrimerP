@@ -94,166 +94,153 @@ def design_primers_for_region(sequence, product_size_range, num_to_return=10):
         }
     )
 
-def find_primer_matches(sequence, primer, allow_mismatches=0):
-    """Find all positions where primer matches in sequence."""
-    matches = []
-    sequence = str(sequence).upper()
-    primer = str(primer).upper()
-    
-    for i in range(len(sequence) - len(primer) + 1):
-        subseq = sequence[i:i+len(primer)]
-        mismatches = sum(1 for a, b in zip(primer, subseq) if a != b)
-        if mismatches <= allow_mismatches:
-            matches.append(i)
-    
-    return matches
-
-def simulate_pcr(forward_primer, reverse_primer, sequence, max_product_size=5000):
-    """Simulate PCR to find potential amplification products."""
-    results = []
-    
-    # Convert to string and uppercase
-    sequence = str(sequence).upper()
-    forward_primer = str(forward_primer).upper()
-    reverse_primer = str(reverse_primer).upper()
-    
-    # Find forward primer binding sites
-    forward_matches = find_primer_matches(sequence, forward_primer)
-    
-    # Find reverse primer binding sites (look for reverse complement)
-    reverse_primer_rc = str(Seq(reverse_primer).reverse_complement()).upper()
-    reverse_matches = find_primer_matches(sequence, reverse_primer_rc)
-    
-    # Find valid PCR products
-    for f_pos in forward_matches:
-        for r_pos in reverse_matches:
-            # Reverse primer should be downstream of forward primer
-            if r_pos > f_pos:
-                product_size = r_pos + len(reverse_primer_rc) - f_pos
-                if product_size <= max_product_size:
-                    results.append({
-                        'forward_start': f_pos,
-                        'reverse_start': r_pos,
-                        'product_size': product_size,
-                        'amplicon_start': f_pos,
-                        'amplicon_end': r_pos + len(reverse_primer_rc)
-                    })
-    
-    return results
-
-def check_primer_specificity(forward_primer, reverse_primer, records, target_record_id, target_feature=None, target_feature_name="Unknown"):
-    """Check primer specificity across all records and features."""
-    specificity_results = []
-    target_found = False
-    
-    st.write(f"**Checking specificity for primers:**")
-    st.write(f"- Forward: {forward_primer}")
-    st.write(f"- Reverse: {reverse_primer}")
-    st.write(f"- Target: {target_record_id} - {target_feature_name}")
-    
-    # Check each record
-    for record in records:
-        record_id = record.id
-        st.write(f"Analyzing record: {record_id}...")
+def simple_pcr_check(forward_primer, reverse_primer, sequence):
+    """Simple PCR amplification check - just look for primer binding sites."""
+    try:
+        # Convert everything to uppercase strings
+        seq_str = str(sequence).upper()
+        forward = str(forward_primer).upper()
+        reverse = str(reverse_primer).upper()
+        reverse_rc = str(Seq(reverse).reverse_complement()).upper()
         
-        # If this is the target record and we have a target feature, check it first
-        if record_id == target_record_id and target_feature is not None:
+        # Find primer positions
+        forward_pos = seq_str.find(forward)
+        reverse_pos = seq_str.find(reverse_rc)
+        
+        # Check if both primers bind and in correct orientation
+        if forward_pos != -1 and reverse_pos != -1 and reverse_pos > forward_pos:
+            product_size = reverse_pos - forward_pos + len(reverse)
+            return [{
+                'start': forward_pos,
+                'end': reverse_pos + len(reverse_rc),
+                'size': product_size
+            }]
+        return []
+    except Exception as e:
+        st.error(f"Error in PCR check: {str(e)}")
+        return []
+
+def check_primer_specificity_simple(forward_primer, reverse_primer, records, target_record_id, target_feature, target_feature_name):
+    """Simplified primer specificity check with extensive debugging."""
+    
+    # Initialize results
+    all_results = []
+    debug_info = []
+    
+    try:
+        st.write("🔍 **Starting Primer Specificity Analysis...**")
+        st.write(f"- Forward primer: `{forward_primer}`")
+        st.write(f"- Reverse primer: `{reverse_primer}`")
+        st.write(f"- Target record: `{target_record_id}`")
+        st.write(f"- Target feature: `{target_feature_name}`")
+        
+        # First, check the target feature specifically
+        if target_feature is not None:
             try:
-                target_seq = target_feature.extract(record.seq)
-                pcr_products = simulate_pcr(forward_primer, reverse_primer, target_seq)
-                
-                if pcr_products:
-                    target_found = True
-                    for i, product in enumerate(pcr_products):
-                        result = {
-                            'Record ID': record_id,
-                            'Feature Type': 'Target Feature',
-                            'Feature Name': target_feature_name,
-                            'Location': str(target_feature.location),
-                            'Product Size (bp)': product['product_size'],
-                            'Amplicon Position': f"{product['amplicon_start']}-{product['amplicon_end']}",
-                            'Is Target': 'YES',
-                            'Status': '✅ Target'
-                        }
-                        specificity_results.append(result)
-            except Exception as e:
-                st.warning(f"Error checking target feature: {e}")
-        
-        # Check all features in the record
-        features = extract_features_from_record(record)
-        for feature_type in features:
-            for feature in features[feature_type]:
-                # Skip the target feature to avoid duplication
-                if (record_id == target_record_id and target_feature is not None and 
-                    feature.location == target_feature.location):
-                    continue
-                
-                try:
-                    # Get feature information
-                    feature_name = feature.qualifiers.get('gene', 
-                                    feature.qualifiers.get('product', 
-                                    feature.qualifiers.get('locus_tag', ['Unknown'])))[0]
-                    
-                    # Extract feature sequence
-                    feature_seq = feature.extract(record.seq)
-                    
-                    # Skip very short sequences
-                    if len(feature_seq) < len(forward_primer) + len(reverse_primer):
-                        continue
-                    
-                    # Simulate PCR
-                    pcr_products = simulate_pcr(forward_primer, reverse_primer, feature_seq)
-                    
-                    # Add results
-                    for product in pcr_products:
-                        result = {
-                            'Record ID': record_id,
-                            'Feature Type': feature_type,
-                            'Feature Name': feature_name,
-                            'Location': str(feature.location),
-                            'Product Size (bp)': product['product_size'],
-                            'Amplicon Position': f"{product['amplicon_start']}-{product['amplicon_end']}",
-                            'Is Target': 'NO',
-                            'Status': '⚠️ Off-target'
-                        }
-                        specificity_results.append(result)
-                        
-                except Exception as e:
-                    # Skip problematic features silently
-                    continue
-        
-        # Also check the entire record sequence for comprehensive analysis
-        try:
-            whole_seq_products = simulate_pcr(forward_primer, reverse_primer, record.seq)
-            for product in whole_seq_products:
-                # Check if this product overlaps with any feature we already found
-                overlaps_existing = False
-                for existing in specificity_results:
-                    if (existing['Record ID'] == record_id and 
-                        abs(product['product_size'] - existing['Product Size (bp)']) < 10):
-                        overlaps_existing = True
+                st.write("✅ Checking target feature...")
+                target_record = None
+                for record in records:
+                    if record.id == target_record_id:
+                        target_record = record
                         break
                 
-                if not overlaps_existing:
-                    is_target_match = (record_id == target_record_id and not target_found)
-                    result = {
-                        'Record ID': record_id,
-                        'Feature Type': 'Whole sequence',
-                        'Feature Name': 'Non-annotated region',
-                        'Location': f"{product['amplicon_start']}-{product['amplicon_end']}",
-                        'Product Size (bp)': product['product_size'],
-                        'Amplicon Position': f"{product['amplicon_start']}-{product['amplicon_end']}",
-                        'Is Target': 'MAYBE' if is_target_match else 'NO',
-                        'Status': '🔍 Unannotated' if is_target_match else '⚠️ Off-target'
-                    }
-                    specificity_results.append(result)
-                    if is_target_match:
-                        target_found = True
+                if target_record:
+                    target_seq = target_feature.extract(target_record.seq)
+                    st.write(f"Target sequence length: {len(target_seq)} bp")
+                    
+                    pcr_results = simple_pcr_check(forward_primer, reverse_primer, target_seq)
+                    
+                    if pcr_results:
+                        for result in pcr_results:
+                            all_results.append({
+                                'Record': target_record_id,
+                                'Feature': f"{target_feature_name} (TARGET)",
+                                'Location': str(target_feature.location),
+                                'Product Size': result['size'],
+                                'Status': '🎯 TARGET',
+                                'Is_Target': True
+                            })
+                        st.write(f"✅ Found {len(pcr_results)} target amplification(s)")
+                    else:
+                        st.write("⚠️ No amplification found in target feature")
+                else:
+                    st.error("Could not find target record!")
+            except Exception as e:
+                st.error(f"Error checking target feature: {str(e)}")
+                debug_info.append(f"Target feature error: {str(e)}")
+        
+        # Now check all other features in all records
+        st.write("🔍 Checking all other features for off-target amplification...")
+        
+        total_features_checked = 0
+        
+        for record in records:
+            st.write(f"Analyzing record: **{record.id}**")
+            
+            # Get all features
+            features = extract_features_from_record(record)
+            record_feature_count = 0
+            
+            for feature_type in ['CDS', 'tRNA', 'gene']:
+                if feature_type in features:
+                    for feature in features[feature_type]:
+                        # Skip target feature to avoid duplication
+                        if (record.id == target_record_id and target_feature is not None and 
+                            str(feature.location) == str(target_feature.location)):
+                            continue
                         
-        except Exception as e:
-            st.warning(f"Could not analyze whole sequence for {record_id}: {e}")
-    
-    return specificity_results, target_found
+                        try:
+                            # Get feature name
+                            gene_name = (feature.qualifiers.get('gene', [None])[0] or 
+                                        feature.qualifiers.get('product', [None])[0] or 
+                                        feature.qualifiers.get('locus_tag', ['Unknown'])[0])
+                            
+                            # Extract sequence
+                            feature_seq = feature.extract(record.seq)
+                            
+                            # Skip very short sequences
+                            if len(feature_seq) < len(forward_primer) + len(reverse_primer) + 10:
+                                continue
+                            
+                            # Check for PCR amplification
+                            pcr_results = simple_pcr_check(forward_primer, reverse_primer, feature_seq)
+                            
+                            if pcr_results:
+                                for result in pcr_results:
+                                    all_results.append({
+                                        'Record': record.id,
+                                        'Feature': f"{gene_name} ({feature_type})",
+                                        'Location': str(feature.location),
+                                        'Product Size': result['size'],
+                                        'Status': '⚠️ OFF-TARGET',
+                                        'Is_Target': False
+                                    })
+                            
+                            record_feature_count += 1
+                            total_features_checked += 1
+                            
+                        except Exception as e:
+                            debug_info.append(f"Feature {feature_type} in {record.id}: {str(e)}")
+                            continue
+            
+            st.write(f"  - Checked {record_feature_count} features in {record.id}")
+        
+        st.write(f"**Total features analyzed: {total_features_checked}**")
+        
+        # Show debug info if there were errors
+        if debug_info:
+            with st.expander("Debug Information"):
+                for info in debug_info:
+                    st.write(f"- {info}")
+        
+        return all_results
+        
+    except Exception as e:
+        st.error(f"Critical error in specificity check: {str(e)}")
+        import traceback
+        st.error("Full traceback:")
+        st.code(traceback.format_exc())
+        return []
 
 if uploaded_file is not None:
     try:
@@ -294,9 +281,9 @@ if uploaded_file is not None:
                 feature_options = []
                 for feature in features[feature_type]:
                     # Get the gene name if available, otherwise use a placeholder
-                    gene_name = feature.qualifiers.get('gene', 
-                                feature.qualifiers.get('product', 
-                                feature.qualifiers.get('locus_tag', ['Unknown'])))[0]
+                    gene_name = (feature.qualifiers.get('gene', [None])[0] or 
+                                feature.qualifiers.get('product', [None])[0] or 
+                                feature.qualifiers.get('locus_tag', ['Unknown'])[0])
                     feature_options.append(f"{gene_name} ({feature.location})")
                 
                 selected_index = st.selectbox(
@@ -310,7 +297,7 @@ if uploaded_file is not None:
                 feature_sequence = selected_feature.extract(record.seq)
                 
                 st.write(f"Selected {feature_type} sequence (length: {len(feature_sequence)} bp):")
-                st.code(str(feature_sequence), language="text")
+                st.code(str(feature_sequence)[:200] + "..." if len(str(feature_sequence)) > 200 else str(feature_sequence), language="text")
                 
                 st.write("## Primer Design Parameters")
                 product_size_range = st.text_input(
@@ -346,6 +333,7 @@ if uploaded_file is not None:
                             primer_data.append(primer_info)
                     
                     if primer_data:
+                        # Store in session state
                         st.session_state['primer_data'] = primer_data
                         st.session_state['selected_record'] = record.id
                         st.session_state['records'] = records
@@ -364,100 +352,129 @@ if uploaded_file is not None:
                             "text/csv",
                             key='download-csv'
                         )
-                        
-                        # Primer specificity check option
-                        if 'primer_data' in st.session_state:
-                            st.write("## Primer Specificity Check")
-                            st.write("Check if your primers could amplify unintended regions.")
-                            
-                            primer_options = [f"Pair {i+1}: {p['Left Sequence'][:15]}... / {p['Right Sequence'][:15]}..." 
-                                             for i, p in enumerate(st.session_state['primer_data'])]
-                            
-                            selected_pair = st.selectbox(
-                                "Select a primer pair to check:", 
-                                options=range(len(primer_options)),
-                                format_func=lambda x: primer_options[x]
-                            )
-                            
-                            if st.button("Check Primer Specificity"):
-                                selected_primer = st.session_state['primer_data'][selected_pair]
-                                forward_primer = selected_primer['Left Sequence']
-                                reverse_primer = selected_primer['Right Sequence']
-                                
-                                with st.spinner("Analyzing primer specificity across all sequences..."):
-                                    specificity_results, target_found = check_primer_specificity(
-                                        forward_primer,
-                                        reverse_primer,
-                                        st.session_state['records'],
-                                        st.session_state['selected_record'],
-                                        st.session_state['selected_feature'],
-                                        st.session_state['selected_feature_name']
-                                    )
-                                
-                                # Display results
-                                st.write("---")
-                                if specificity_results:
-                                    st.write(f"## Specificity Analysis Results")
-                                    st.write(f"Found **{len(specificity_results)}** potential amplification products:")
-                                    
-                                    # Convert to DataFrame for display
-                                    spec_df = pd.DataFrame(specificity_results)
-                                    
-                                    # Color coding function
-                                    def highlight_specificity(row):
-                                        if row['Is Target'] == 'YES':
-                                            return ['background-color: #d4edda'] * len(row)  # Green
-                                        elif row['Is Target'] == 'MAYBE':
-                                            return ['background-color: #fff3cd'] * len(row)  # Yellow
-                                        else:
-                                            return ['background-color: #f8d7da'] * len(row)  # Red
-                                    
-                                    # Display the results table
-                                    st.dataframe(spec_df.style.apply(highlight_specificity, axis=1), use_container_width=True)
-                                    
-                                    # Summary statistics
-                                    target_count = sum(1 for r in specificity_results if r['Is Target'] in ['YES', 'MAYBE'])
-                                    off_target_count = sum(1 for r in specificity_results if r['Is Target'] == 'NO')
-                                    
-                                    st.write("### Summary:")
-                                    col1, col2, col3 = st.columns(3)
-                                    with col1:
-                                        st.metric("Target Amplifications", target_count)
-                                    with col2:
-                                        st.metric("Off-target Amplifications", off_target_count)
-                                    with col3:
-                                        if off_target_count == 0:
-                                            st.success("✅ SPECIFIC")
-                                        else:
-                                            st.warning("⚠️ NON-SPECIFIC")
-                                    
-                                    # Detailed interpretation
-                                    st.write("### Interpretation:")
-                                    if target_count > 0 and off_target_count == 0:
-                                        st.success("🎯 **Excellent specificity!** These primers should amplify only your target sequence.")
-                                    elif target_count > 0 and off_target_count > 0:
-                                        st.warning(f"⚠️ **Moderate specificity.** Primers will amplify the target but also {off_target_count} off-target sequence(s). Consider redesigning for better specificity.")
-                                    elif target_count == 0 and off_target_count > 0:
-                                        st.error("❌ **Poor specificity.** Primers do not amplify the intended target but will amplify off-target sequences.")
-                                    elif target_count == 0 and off_target_count == 0:
-                                        st.warning("❓ **No amplification predicted.** Primers may not work under standard PCR conditions.")
-                                
-                                else:
-                                    st.success("🎯 **Perfect Specificity!**")
-                                    st.write("No amplification products were found in any sequence other than your target.")
-                                    st.write("These primers appear to be highly specific to your selected sequence.")
                     else:
                         st.error('No primers were found. Please adjust your parameters and try again.')
+                
+                # Primer specificity check section - show always after primers are designed
+                if 'primer_data' in st.session_state and st.session_state['primer_data']:
+                    st.write("---")
+                    st.write("## 🎯 Primer Specificity Check")
+                    st.info("This tool will check if your primers might amplify unintended sequences.")
+                    
+                    # Show primer options
+                    primer_options = []
+                    for i, p in enumerate(st.session_state['primer_data']):
+                        primer_options.append(f"Pair {i+1}: {p['Left Sequence']} / {p['Right Sequence']}")
+                    
+                    selected_pair = st.selectbox(
+                        "Select a primer pair to analyze:", 
+                        options=range(len(primer_options)),
+                        format_func=lambda x: f"Pair {x+1}",
+                        key="primer_pair_selection"
+                    )
+                    
+                    # Show selected primer details
+                    selected_primer = st.session_state['primer_data'][selected_pair]
+                    st.write(f"**Selected Primer Pair {selected_pair + 1}:**")
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.write(f"Forward: `{selected_primer['Left Sequence']}`")
+                    with col2:
+                        st.write(f"Reverse: `{selected_primer['Right Sequence']}`")
+                    
+                    # Specificity check button
+                    if st.button("🔍 Run Specificity Analysis", key="specificity_button"):
+                        st.write("---")
+                        
+                        # Run the analysis
+                        forward_primer = selected_primer['Left Sequence']
+                        reverse_primer = selected_primer['Right Sequence']
+                        
+                        # Debug: Show what we're working with
+                        st.write("**Analysis Parameters:**")
+                        st.write(f"- Number of records to analyze: {len(st.session_state['records'])}")
+                        st.write(f"- Target record: {st.session_state['selected_record']}")
+                        st.write(f"- Target feature: {st.session_state['selected_feature_name']}")
+                        
+                        try:
+                            # Run specificity check
+                            results = check_primer_specificity_simple(
+                                forward_primer,
+                                reverse_primer,
+                                st.session_state['records'],
+                                st.session_state['selected_record'],
+                                st.session_state['selected_feature'],
+                                st.session_state['selected_feature_name']
+                            )
+                            
+                            st.write("---")
+                            
+                            # Display results
+                            if results:
+                                st.write(f"## 📊 Specificity Results ({len(results)} amplifications found)")
+                                
+                                # Create results dataframe
+                                df = pd.DataFrame(results)
+                                
+                                # Display with color coding
+                                def color_rows(row):
+                                    if row['Is_Target']:
+                                        return ['background-color: #d4edda'] * len(row)  # Light green
+                                    else:
+                                        return ['background-color: #f8d7da'] * len(row)  # Light red
+                                
+                                st.dataframe(df.style.apply(color_rows, axis=1), use_container_width=True)
+                                
+                                # Summary
+                                target_count = sum(1 for r in results if r['Is_Target'])
+                                offtarget_count = len(results) - target_count
+                                
+                                col1, col2, col3 = st.columns(3)
+                                with col1:
+                                    st.metric("Target Amplifications", target_count)
+                                with col2:
+                                    st.metric("Off-target Amplifications", offtarget_count)
+                                with col3:
+                                    if offtarget_count == 0 and target_count > 0:
+                                        st.success("✅ SPECIFIC")
+                                    elif offtarget_count > 0:
+                                        st.warning("⚠️ NON-SPECIFIC")
+                                    else:
+                                        st.error("❌ NO TARGET")
+                                
+                                # Interpretation
+                                st.write("### 📝 Interpretation:")
+                                if target_count > 0 and offtarget_count == 0:
+                                    st.success("🎯 **Excellent!** These primers are specific to your target sequence.")
+                                elif target_count > 0 and offtarget_count > 0:
+                                    st.warning(f"⚠️ **Caution:** Primers will amplify the target but also {offtarget_count} off-target sequence(s).")
+                                elif target_count == 0 and offtarget_count > 0:
+                                    st.error("❌ **Problem:** Primers don't amplify the target but will amplify off-target sequences.")
+                                else:
+                                    st.info("❓ **No amplification detected.** Primers may not work under standard conditions.")
+                            
+                            else:
+                                st.success("🎯 **Perfect Specificity!**")
+                                st.write("No amplification products detected in any sequence.")
+                                st.write("These primers appear highly specific (or may not amplify under standard conditions).")
+                        
+                        except Exception as e:
+                            st.error(f"Error during specificity analysis: {str(e)}")
+                            import traceback
+                            with st.expander("Full Error Details"):
+                                st.code(traceback.format_exc())
+                
             else:
                 st.warning(f"No {feature_type} features found in the selected record.")
     
     except Exception as e:
-        st.error(f"An error occurred: {str(e)}")
-        st.error("Please check that your GenBank file is valid and try again.")
-        # Add debug information
+        st.error(f"An error occurred while processing the file: {str(e)}")
         import traceback
         with st.expander("Debug Information"):
             st.code(traceback.format_exc())
+
+else:
+    st.info("👆 Please upload a GenBank file to get started.")
 
 # Add copyright information section at the end of the main page
 st.markdown("""
