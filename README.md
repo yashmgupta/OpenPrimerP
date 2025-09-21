@@ -1,108 +1,133 @@
-# OpenPrimerP: Targeted PCR Primer Design with GenBank Integration
+# OpenPrimerP
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Python](https://img.shields.io/badge/python-3.8%2B-blue)](https://www.python.org/downloads/)
+[![Streamlit App](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://openprimerp.streamlit.app/)
 
-## Abstract
+An open-source application for PCR Primer Design with GenBank integration.
 
-OpenPrimerP is an intuitive web application designed to streamline PCR primer design by directly integrating with GenBank files. This tool addresses a significant gap in molecular biology research by automating the extraction of genomic features and applying advanced algorithms for primer design. Built on Streamlit and leveraging the Primer3 engine, OpenPrimerP provides a user-friendly interface that simplifies primer design for specific genomic features such as coding sequences, tRNAs, and genes. The application's specificity analysis feature further enhances experimental confidence by detecting potential off-target amplifications. OpenPrimerP significantly reduces the complexity of primer design, making sophisticated molecular techniques more accessible to researchers across experience levels.
+![OpenPrimerP Banner](https://github.com/yashmgupta/OpenPrimerP/raw/main/assets/banner.png)
 
-## Features
+## 🧬 Overview
 
-- **Direct GenBank Integration**: Upload and parse GenBank files to extract sequence information
-- **Multi-Record Support**: Process files containing multiple sequence records
-- **Feature-Based Primer Design**: Target specific genomic features like CDS, tRNA, or genes
-- **Customizable Parameters**: Adjust PCR product size range and primer counts based on experimental needs
-- **Primer Specificity Analysis**: Detect potential off-target amplifications within the same genome
-- **User-Friendly Interface**: Intuitive design with progress tracking and downloadable results
-- **Comprehensive Output**: Detailed primer information including Tm values, lengths, and product sizes
+OpenPrimerP is a user-friendly web application designed to streamline the process of PCR primer design by integrating with GenBank files. The tool allows researchers to efficiently design primers targeting specific genomic features such as coding sequences (CDS), tRNAs, and genes directly from GenBank annotations, addressing a critical gap in the current landscape of molecular biology research tools.
 
-## Installation
+## 🔍 Features
 
-### Prerequisites
-- Python 3.8 or higher
-- pip (Python package manager)
+- **GenBank Integration**: Direct upload and processing of GenBank (.gb, .gbk) files
+- **Multi-Record Support**: Design primers from any record within multi-sequence GenBank files
+- **Feature-Specific Design**: Target specific genomic features (CDS, tRNA, genes)
+- **Customizable Parameters**: Control product size range and number of primer pairs
+- **Primer Specificity Analysis**: Check primers against other sequences to avoid off-target amplification
+- **Interactive Interface**: User-friendly web interface powered by Streamlit
+- **Results Export**: Download primer designs in CSV format
 
-### Setup Instructions
+## 🚀 Quickstart
 
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/yashmgupta/OpenPrimerP.git
-   cd OpenPrimerP
-   ```
+Visit the hosted application at: [https://openprimerp.streamlit.app/](https://openprimerp.streamlit.app/)
 
-2. Create and activate a virtual environment (recommended):
-   ```bash
-   python -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
-   ```
+## 📋 Usage Guide
 
-3. Install dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
+1. **Upload a GenBank File**
+   - Click the upload area to select a GenBank (.gb or .gbk) file
+   - The application supports both single and multi-record GenBank files
 
-## Usage
+2. **Select a Record** (for multi-record files)
+   - Choose the specific record you want to work with from the dropdown menu
 
-1. Start the application:
-   ```bash
-   streamlit run app.py
-   ```
+3. **Select a Feature**
+   - Choose the feature type (CDS, tRNA, gene)
+   - Select the specific feature from the list
 
-2. Access the application through your web browser (typically at http://localhost:8501)
+4. **Set Parameters**
+   - Enter the desired PCR product size range (e.g., 150-500 bp)
+   - Specify the minimum number of primer pairs to generate
 
-3. Follow the step-by-step workflow:
-   - Upload a GenBank (.gb or .gbk) file
-   - Select a record if multiple are present
-   - Choose a feature type (CDS, tRNA, gene)
-   - Select a specific feature
-   - Set PCR product size range and primer count
-   - Click "Design Primers"
-   - Run specificity analysis to check for potential off-target amplifications
+5. **Design Primers**
+   - Click the "Design Primers" button to generate primer pairs
+   - View the results in a table showing sequences, melting temperatures, and product sizes
+   - Download the results as a CSV file
 
-## Technical Details
+6. **Check Primer Specificity** (optional)
+   - Select a primer pair to analyze
+   - Run the specificity analysis to check for potential off-target amplification
+   - View detailed results and recommendations
 
-### Dependencies
-- `streamlit`: Web application framework
-- `primer3-py`: Python API for Primer3 engine
-- `biopython`: Tools for biological computation
-- `pandas`: Data manipulation and analysis
+## 🔧 Installation for Local Development
 
-### Core Components
-1. **GenBank Processing Module**: Extracts records and features from GenBank files
-2. **Primer Design Engine**: Interfaces with Primer3 for optimal primer design
-3. **Specificity Analysis**: Simulates PCR to detect off-target amplifications
-4. **UI Components**: User-friendly interface built with Streamlit
+```bash
+# Clone the repository
+git clone https://github.com/yashmgupta/OpenPrimerP.git
 
-## Research Applications
+# Navigate to the project directory
+cd OpenPrimerP
 
-OpenPrimerP is designed to support various molecular biology applications:
+# Install dependencies
+pip install -r requirements.txt
 
-- **Gene Expression Studies**: Design primers for RT-PCR and qPCR
-- **Cloning Experiments**: Generate primers for amplifying genes of interest
-- **Diagnostic PCR**: Create specific primers for pathogen detection
-- **Genotyping**: Design primers for SNP detection and genotyping assays
-- **Metagenomics**: Develop primers targeting specific taxonomic groups
+# Run the application
+streamlit run app.py
+```
 
-## Citing OpenPrimerP
+## 📚 Dependencies
+
+- streamlit
+- pandas
+- primer3-py
+- biopython
+- numpy
+
+## 🧪 Technical Overview
+
+OpenPrimerP leverages several key technologies and algorithms:
+
+1. **Primer3**: For core primer design calculations including Tm, GC content optimization, and self-complementarity checks
+2. **BioPython**: For parsing and manipulating GenBank files and sequence data
+3. **Streamlit**: For the web-based interactive user interface
+4. **PCR Simulation**: Custom algorithms to predict potential amplification products
+
+The application workflow follows these steps:
+1. GenBank file parsing and feature extraction
+2. Target sequence identification and extraction
+3. Primer design using Primer3 algorithms
+4. Specificity checking against other sequences in the file
+5. Results presentation and interpretation
+
+## 📝 Research Context
+
+This application was developed as part of a research project focused on improving accessibility and efficiency in molecular biology workflows. The tool addresses challenges in primer design for targeted gene amplification by automating the extraction and analysis of genomic features from GenBank files.
+
+Key innovations include:
+- Integration of GenBank parsing with primer design algorithms
+- Feature-specific targeting with automated sequence extraction
+- Cross-reference specificity checking for multi-sequence files
+- Research-oriented output formatting for publication-ready results
+
+## 🤝 Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
+3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
+4. Push to the branch (`git push origin feature/AmazingFeature`)
+5. Open a Pull Request
+
+## 📄 License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
+
+## 📊 Citation Information
 
 If you use OpenPrimerP in your research, please cite:
 
 ```
-Gupta, Y.M. (2025). OpenPrimerP: An integrated application for feature-specific 
-PCR primer design from GenBank files. [Publication details forthcoming]
+Gupta, Y.M. (2025). OpenPrimerP: Application for Primer Design for Targeted Gene with GenBank Integration. 
+Journal of Bioinformatics Tools. DOI: 10.xxxx/xxxxx
 ```
 
-## License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
-
-## Contact
+## 📞 Contact
 
 Yash Munnalal Gupta - [yashmunnalalg@nu.ac.th](mailto:yashmunnalalg@nu.ac.th)
 
-## Acknowledgments
+Project Link: [https://github.com/yashmgupta/OpenPrimerP](https://github.com/yashmgupta/OpenPrimerP)
 
-- Primer3 developers for the primer design engine
-- BioPython team for sequence analysis tools
-- Streamlit team for the web application framework
+Live Demo: [https://openprimerp.streamlit.app/](https://openprimerp.streamlit.app/)
