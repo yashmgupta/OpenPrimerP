@@ -1,0 +1,10 @@
+streamlit
+biopython
+numpy
+pandas
+scikit-learn
+matplotlib
+scipy
+seaborn
+plotly
+streamlit-aggrid
