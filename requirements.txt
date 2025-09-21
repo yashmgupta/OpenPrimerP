@@ -8,3 +8,6 @@ scipy
 seaborn
 plotly
 streamlit-aggrid
+primer3-py
+altair
+reportlab
