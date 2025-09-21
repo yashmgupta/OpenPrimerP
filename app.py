@@ -20,7 +20,7 @@ st.sidebar.info(
     This application allows you to design PCR primers for specific features within a GenBank file. 
     Follow these steps:
     1. Upload a GenBank file.
-    2. If your file has multiple records, select which one to use.
+    2. Select a record (if multiple records exist).
     3. Select a feature type and then a specific feature.
     4. Enter the desired PCR product size range and the minimum number of primer pairs.
     5. Click 'Design Primers' to generate your primers.
@@ -47,13 +47,19 @@ h1, h2, h3 {
 </style>
 """, unsafe_allow_html=True)
 
-def extract_records_from_genbank(genbank_content):
-    """Extracts all records from GenBank content."""
+def extract_features_from_genbank(genbank_content, feature_types=['CDS', 'tRNA', 'gene']):
+    """Extracts specified features from GenBank content."""
     text_stream = StringIO(genbank_content.decode("utf-8")) if isinstance(genbank_content, bytes) else genbank_content
-    return list(SeqIO.parse(text_stream, "genbank"))
+    records = list(SeqIO.parse(text_stream, "genbank"))
+    if not records:
+        st.error("No valid records found in the GenBank file.")
+        return None, None
+    
+    # Return the list of records for selection
+    return records
 
 def extract_features_from_record(record, feature_types=['CDS', 'tRNA', 'gene']):
-    """Extracts specified features from a single GenBank record."""
+    """Extract features from a specific record"""
     features = {ftype: [] for ftype in feature_types}
     for feature in record.features:
         if feature.type in feature_types:
@@ -83,29 +89,23 @@ def design_primers_for_region(sequence, product_size_range, num_to_return=10):
 
 if uploaded_file is not None:
     genbank_content = StringIO(uploaded_file.getvalue().decode("utf-8"))
+    records = extract_features_from_genbank(genbank_content)
     
-    # Parse all records from the GenBank file
-    records = extract_records_from_genbank(genbank_content)
-    
-    if not records:
-        st.error("No valid GenBank records found in the file.")
-    else:
-        # If multiple records, let the user select which one to use
-        selected_record_index = 0
+    if records:
+        # Add record selection if multiple records are present
         if len(records) > 1:
-            st.write(f"## Record Selection")
-            st.info(f"Your GenBank file contains {len(records)} records.")
-            record_options = [f"{record.id} - {record.description[:50]}..." for record in records]
+            st.write("## Record Selection")
+            record_options = [f"{record.id} - {record.description[:50]}..." if len(record.description) > 50 else f"{record.id} - {record.description}" for record in records]
             selected_record_index = st.selectbox(
-                'Select which record to use:',
-                options=range(len(record_options)),
+                'Select a record:', 
+                options=range(len(record_options)), 
                 format_func=lambda x: record_options[x],
-                help="Choose one record from your GenBank file to work with."
+                help="Select a specific record from the GenBank file."
             )
-        
-        record = records[selected_record_index]
-        st.write(f"Working with record: {record.id} - {record.description}")
-        
+            record = records[selected_record_index]
+        else:
+            record = records[0]
+            
         # Extract features from the selected record
         features = extract_features_from_record(record)
         
@@ -117,12 +117,19 @@ if uploaded_file is not None:
         )
 
         if features[feature_type]:
-            feature_options = [f"{feature.qualifiers.get('gene', [''])[0]} ({feature.location})" for feature in features[feature_type]]
+            feature_options = []
+            for feature in features[feature_type]:
+                gene_name = feature.qualifiers.get('gene', [''])[0]
+                locus_tag = feature.qualifiers.get('locus_tag', [''])[0]
+                display_name = gene_name if gene_name else locus_tag
+                display_name = display_name if display_name else str(feature.location)
+                feature_options.append(f"{display_name} ({feature.location})")
+                
             selected_index = st.selectbox(
                 f'Select a {feature_type}:', 
                 options=range(len(feature_options)), 
                 format_func=lambda x: feature_options[x],
-                help="Select a specific feature based on its gene name and location."
+                help="Select a specific feature based on its name and location."
             )
             selected_feature = features[feature_type][selected_index]
 
@@ -179,8 +186,7 @@ if uploaded_file is not None:
                 else:
                     st.error('No primers were found. Please adjust your parameters and try again.')
         else:
-            st.warning(f"No {feature_type} features found in this record.")
-
+            st.warning(f"No {feature_type} features found in the selected record.")
 
 # Add copyright information section at the end of the main page
 st.markdown("""
