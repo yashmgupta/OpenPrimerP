@@ -461,6 +461,6 @@ else:
 # Add copyright information section at the end of the main page
 st.markdown("""
 ---
-**Copyright Notice**: © 2024 Yash Munnalal Gupta. All rights reserved.
-For inquiries or permissions, contact: [yash.610@live.com](mailto:yash.610@live.com)
+**Copyright Notice**: © 2025 Yash Munnalal Gupta. All rights reserved.
+For inquiries or permissions, contact: [yashmunnalalg@nu.ac.th ](mailto:yashmunnalalg@nu.ac.th)
 """, unsafe_allow_html=True)
