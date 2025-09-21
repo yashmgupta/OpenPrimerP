@@ -20,9 +20,10 @@ st.sidebar.info(
     This application allows you to design PCR primers for specific features within a GenBank file. 
     Follow these steps:
     1. Upload a GenBank file.
-    2. Select a feature type and then a specific feature.
-    3. Enter the desired PCR product size range and the minimum number of primer pairs.
-    4. Click 'Design Primers' to generate your primers.
+    2. If your file has multiple records, select which one to use.
+    3. Select a feature type and then a specific feature.
+    4. Enter the desired PCR product size range and the minimum number of primer pairs.
+    5. Click 'Design Primers' to generate your primers.
     """
 )
 
@@ -46,15 +47,18 @@ h1, h2, h3 {
 </style>
 """, unsafe_allow_html=True)
 
-def extract_features_from_genbank(genbank_content, feature_types=['CDS', 'tRNA', 'gene']):
-    """Extracts specified features from GenBank content."""
+def extract_records_from_genbank(genbank_content):
+    """Extracts all records from GenBank content."""
     text_stream = StringIO(genbank_content.decode("utf-8")) if isinstance(genbank_content, bytes) else genbank_content
-    record = SeqIO.read(text_stream, "genbank")
+    return list(SeqIO.parse(text_stream, "genbank"))
+
+def extract_features_from_record(record, feature_types=['CDS', 'tRNA', 'gene']):
+    """Extracts specified features from a single GenBank record."""
     features = {ftype: [] for ftype in feature_types}
     for feature in record.features:
         if feature.type in feature_types:
             features[feature.type].append(feature)
-    return features, record
+    return features
 
 def design_primers_for_region(sequence, product_size_range, num_to_return=10):
     """Design primers for a specific sequence."""
@@ -79,77 +83,103 @@ def design_primers_for_region(sequence, product_size_range, num_to_return=10):
 
 if uploaded_file is not None:
     genbank_content = StringIO(uploaded_file.getvalue().decode("utf-8"))
-    features, record = extract_features_from_genbank(genbank_content)
     
-    st.write("## Feature Selection")
-    feature_type = st.selectbox(
-        'Select feature type:', 
-        ['CDS', 'tRNA', 'gene'],
-        help="Choose the type of genomic feature for which you want to design primers."
-    )
-
-    if features[feature_type]:
-        feature_options = [f"{feature.qualifiers.get('gene', [''])[0]} ({feature.location})" for feature in features[feature_type]]
-        selected_index = st.selectbox(
-            f'Select a {feature_type}:', 
-            options=range(len(feature_options)), 
-            format_func=lambda x: feature_options[x],
-            help="Select a specific feature based on its gene name and location."
+    # Parse all records from the GenBank file
+    records = extract_records_from_genbank(genbank_content)
+    
+    if not records:
+        st.error("No valid GenBank records found in the file.")
+    else:
+        # If multiple records, let the user select which one to use
+        selected_record_index = 0
+        if len(records) > 1:
+            st.write(f"## Record Selection")
+            st.info(f"Your GenBank file contains {len(records)} records.")
+            record_options = [f"{record.id} - {record.description[:50]}..." for record in records]
+            selected_record_index = st.selectbox(
+                'Select which record to use:',
+                options=range(len(record_options)),
+                format_func=lambda x: record_options[x],
+                help="Choose one record from your GenBank file to work with."
+            )
+        
+        record = records[selected_record_index]
+        st.write(f"Working with record: {record.id} - {record.description}")
+        
+        # Extract features from the selected record
+        features = extract_features_from_record(record)
+        
+        st.write("## Feature Selection")
+        feature_type = st.selectbox(
+            'Select feature type:', 
+            ['CDS', 'tRNA', 'gene'],
+            help="Choose the type of genomic feature for which you want to design primers."
         )
-        selected_feature = features[feature_type][selected_index]
 
-        feature_sequence = selected_feature.extract(record.seq)
-        st.write(f"Selected {feature_type} sequence (length: {len(feature_sequence)} bp):")
-        st.code(str(feature_sequence), language="text")  # Display sequence in code format
+        if features[feature_type]:
+            feature_options = [f"{feature.qualifiers.get('gene', [''])[0]} ({feature.location})" for feature in features[feature_type]]
+            selected_index = st.selectbox(
+                f'Select a {feature_type}:', 
+                options=range(len(feature_options)), 
+                format_func=lambda x: feature_options[x],
+                help="Select a specific feature based on its gene name and location."
+            )
+            selected_feature = features[feature_type][selected_index]
 
-        st.write("## Primer Design Parameters")
-        product_size_range = st.text_input(
-            "Enter desired PCR product size range (e.g., 150-500):", 
-            value="150-500",
-            help="Specify the range of the desired PCR product size in base pairs (e.g., 150-500)."
-        )
-        min_num_primers = st.number_input(
-            "Enter minimum number of primer pairs to return:", 
-            min_value=5, value=5, step=1,
-            help="Determine the minimum number of primer pairs to generate."
-        )
+            feature_sequence = selected_feature.extract(record.seq)
+            st.write(f"Selected {feature_type} sequence (length: {len(feature_sequence)} bp):")
+            st.code(str(feature_sequence), language="text")  # Display sequence in code format
 
-        if st.button(f'Design Primers for selected {feature_type}'):
-            with st.spinner('Designing primers...'):  # Show a spinner while primers are being designed
-                primers = design_primers_for_region(feature_sequence, product_size_range, num_to_return=min_num_primers)
+            st.write("## Primer Design Parameters")
+            product_size_range = st.text_input(
+                "Enter desired PCR product size range (e.g., 150-500):", 
+                value="150-500",
+                help="Specify the range of the desired PCR product size in base pairs (e.g., 150-500)."
+            )
+            min_num_primers = st.number_input(
+                "Enter minimum number of primer pairs to return:", 
+                min_value=5, value=5, step=1,
+                help="Determine the minimum number of primer pairs to generate."
+            )
 
-            primer_data = []
-            for i in range(min_num_primers):
-                left_sequence = primers.get(f'PRIMER_LEFT_{i}_SEQUENCE', 'N/A')
-                right_sequence = primers.get(f'PRIMER_RIGHT_{i}_SEQUENCE', 'N/A')
-                if left_sequence != 'N/A' and right_sequence != 'N/A':
-                    primer_info = {
-                        'Primer Pair': i + 1,
-                        'Left Sequence': left_sequence,
-                        'Right Sequence': right_sequence,
-                        'Left TM (°C)': primers.get(f'PRIMER_LEFT_{i}_TM', 'N/A'),
-                        'Right TM (°C)': primers.get(f'PRIMER_RIGHT_{i}_TM', 'N/A'),
-                        'Left Length': len(left_sequence),
-                        'Right Length': len(right_sequence),
-                        'PCR Product Size (bp)': primers.get(f'PRIMER_PAIR_{i}_PRODUCT_SIZE', 'N/A')
-                    }
-                    primer_data.append(primer_info)
+            if st.button(f'Design Primers for selected {feature_type}'):
+                with st.spinner('Designing primers...'):  # Show a spinner while primers are being designed
+                    primers = design_primers_for_region(feature_sequence, product_size_range, num_to_return=min_num_primers)
 
-            if primer_data:
-                st.subheader('Designed Primers')
-                primer_df = pd.DataFrame(primer_data)
-                st.table(primer_df)  # Use st.table to display the primer data
+                primer_data = []
+                for i in range(min_num_primers):
+                    left_sequence = primers.get(f'PRIMER_LEFT_{i}_SEQUENCE', 'N/A')
+                    right_sequence = primers.get(f'PRIMER_RIGHT_{i}_SEQUENCE', 'N/A')
+                    if left_sequence != 'N/A' and right_sequence != 'N/A':
+                        primer_info = {
+                            'Primer Pair': i + 1,
+                            'Left Sequence': left_sequence,
+                            'Right Sequence': right_sequence,
+                            'Left TM (°C)': primers.get(f'PRIMER_LEFT_{i}_TM', 'N/A'),
+                            'Right TM (°C)': primers.get(f'PRIMER_RIGHT_{i}_TM', 'N/A'),
+                            'Left Length': len(left_sequence),
+                            'Right Length': len(right_sequence),
+                            'PCR Product Size (bp)': primers.get(f'PRIMER_PAIR_{i}_PRODUCT_SIZE', 'N/A')
+                        }
+                        primer_data.append(primer_info)
 
-                csv = primer_df.to_csv(index=False).encode('utf-8')
-                st.download_button(
-                    "Download Primers as CSV",
-                    csv,
-                    "primers.csv",
-                    "text/csv",
-                    key='download-csv'
-                )
-            else:
-                st.error('No primers were found. Please adjust your parameters and try again.')
+                if primer_data:
+                    st.subheader('Designed Primers')
+                    primer_df = pd.DataFrame(primer_data)
+                    st.table(primer_df)  # Use st.table to display the primer data
+
+                    csv = primer_df.to_csv(index=False).encode('utf-8')
+                    st.download_button(
+                        "Download Primers as CSV",
+                        csv,
+                        "primers.csv",
+                        "text/csv",
+                        key='download-csv'
+                    )
+                else:
+                    st.error('No primers were found. Please adjust your parameters and try again.')
+        else:
+            st.warning(f"No {feature_type} features found in this record.")
 
 
 # Add copyright information section at the end of the main page
