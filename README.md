@@ -121,7 +121,7 @@ If you use OpenPrimerP in your research, please cite:
 
 ```
 Gupta, Y.M. (2025). OpenPrimerP: Application for Primer Design for Targeted Gene with GenBank Integration. 
-Journal of Bioinformatics Tools. DOI: 10.xxxx/xxxxx
+DOI: 10.xxxx/xxxxx
 ```
 
 ## 📞 Contact
