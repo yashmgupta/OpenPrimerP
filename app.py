@@ -7,14 +7,14 @@ import re
 import os
 from io import StringIO
 
-# Ensure the 'temp' directory exists for saving temporary files
+# Make sure we have a temp folder for saving little intermediate files
 temp_dir = "temp"
 os.makedirs(temp_dir, exist_ok=True)
 
 # Streamlit UI setup
 st.set_page_config(page_title="PCR Primer Design", page_icon="🧬", layout="wide")
 
-# User Documentation
+# Sidebar user guide – quick “how-to” for anyone opening the app
 st.sidebar.header("User Guide")
 st.sidebar.info(
     """
@@ -29,14 +29,14 @@ st.sidebar.info(
     """
 )
 
-# File uploader with additional help
+# File uploader with additional help (we only care about GenBank format here)
 uploaded_file = st.file_uploader(
     "Upload a GenBank file", 
     type=['gb', 'gbk'],
     help="Upload a GenBank (.gb or .gbk) file containing the DNA sequence from which to design primers."
 )
 
-# Custom CSS for styling
+# Some CSS tweaks to make things prettier
 st.markdown("""
 <style>
 h1, h2, h3 {
